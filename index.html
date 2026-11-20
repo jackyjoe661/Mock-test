@@ -210,6 +210,12 @@ Explanation: Abundant means available in large quantities."></textarea>
       <button class="btn primary" id="reviewBtn">Review Answers</button>
     </div>
   </div>
+  <div id="remockPanel" class="panel hidden">
+    <h2 id="remockHeading">Questions to practise again</h2>
+    <p id="remockMessage"></p>
+    <div id="wrongQuestionsList"></div>
+    <button class="btn primary full" id="remockBtn" style="margin-top:12px">REMOCK?</button>
+  </div>
   <div id="reviewArea" class="panel hidden">
     <h2>Answer review</h2>
     <div id="reviewList"></div>
@@ -289,6 +295,9 @@ Explanation: Accommodation has double c and double m.`;
   let durationSeconds = 1500, remaining = 1500, timerId = null;
   let paused = false, submitted = false, startedAt = 0, positive = 1, negative = .25;
   let testTitle = "My Practice Test";
+  let remockRound = false;
+  let pendingRemockQuestions = [];
+  let originalQuestionCount = 0;
 
   function parseQuestions(raw) {
     // Start a new question at lines such as Q1., Question 1:, or 1.
@@ -358,6 +367,10 @@ Explanation: Accommodation has double c and double m.`;
     }
     testTitle = $("testTitle").value.trim() || "My Practice Test";
     answers = {}; marked = new Set(); current = 0; paused = false; submitted = false;
+    remockRound = false;
+    pendingRemockQuestions = [];
+    originalQuestionCount = questions.length;
+    $("remockPanel").classList.add("hidden");
     $("setupScreen").classList.add("hidden");
     $("resultScreen").classList.add("hidden");
     $("testScreen").classList.remove("hidden");
@@ -426,9 +439,10 @@ Explanation: Accommodation has double c and double m.`;
     const score=correct*positive-wrong*negative;
     const accuracy=attempted?correct/attempted*100:0;
     const elapsed=durationSeconds-remaining;
+    pendingRemockQuestions=questions.filter((q,i)=>answers[i]!==q.answer);
     $("testScreen").classList.add("hidden");
     $("resultScreen").classList.remove("hidden");
-    $("resultTitle").textContent=`${testTitle}${auto?" · Time is up":""}`;
+    $("resultTitle").textContent=`${testTitle}${auto?" · Time is up":""}${remockRound?" · Remock round":""}`;
     $("score").textContent=Number(score.toFixed(2));
     $("accuracy").textContent=`${accuracy.toFixed(1)}%`;
     $("correctCount").textContent=correct;
@@ -436,6 +450,53 @@ Explanation: Accommodation has double c and double m.`;
     $("unattemptedCount").textContent=unattempted;
     $("timeUsed").textContent=formatTime(elapsed);
     $("reviewArea").classList.add("hidden");
+
+    const panel=$("remockPanel"), list=$("wrongQuestionsList"), button=$("remockBtn");
+    list.innerHTML="";
+    if(pendingRemockQuestions.length===0) {
+      panel.classList.remove("hidden");
+      $("remockHeading").textContent="🎉 100% Correct!";
+      $("remockMessage").textContent=remockRound
+        ? "Excellent! You answered every question correctly in this remock. All questions in this practice set are mastered."
+        : "Perfect score! You got every question right. There is nothing to remock.";
+      button.classList.add("hidden");
+    } else {
+      panel.classList.remove("hidden");
+      $("remockHeading").textContent=remockRound?"Still to practise":"Your incorrect / unanswered questions";
+      $("remockMessage").textContent=`${pendingRemockQuestions.length} question(s) need another attempt. The remock will contain only these questions. We will repeat the missed ones until you get 100% correct.`;
+      button.classList.remove("hidden");
+      button.textContent=remockRound?"REMOCK AGAIN?":"REMOCK?";
+      pendingRemockQuestions.forEach((q)=>{
+        const item=document.createElement("div");
+        item.className="review-item";
+        const title=document.createElement("h3");
+        title.textContent=q.stem;
+        item.appendChild(title);
+        const correctLine=document.createElement("p");
+        correctLine.className="review-good";
+        correctLine.textContent=`Correct answer: ${"ABCD"[q.answer]}) ${q.options[q.answer]}`;
+        item.appendChild(correctLine);
+        if(q.explanation){const ex=document.createElement("p");ex.textContent="Explanation: "+q.explanation;item.appendChild(ex);}
+        list.appendChild(item);
+      });
+    }
+    window.scrollTo(0,0);
+  }
+
+  function startRemock() {
+    if(!pendingRemockQuestions.length) return;
+    questions=pendingRemockQuestions.slice();
+    pendingRemockQuestions=[];
+    answers={}; marked=new Set(); current=0; paused=false; submitted=false;
+    remockRound=true;
+    // Give the remock a practical time allowance of one minute per question.
+    durationSeconds=Math.max(60, questions.length*60);
+    remaining=durationSeconds;
+    $("resultScreen").classList.add("hidden");
+    $("testScreen").classList.remove("hidden");
+    $("totalNo").textContent=questions.length;
+    renderQuestion();
+    startTimer();
     window.scrollTo(0,0);
   }
   function showReview() {
@@ -479,8 +540,10 @@ Explanation: Accommodation has double c and double m.`;
   $("pauseBtn").addEventListener("click",()=>{paused=true;$("pauseModal").classList.remove("hidden");});
   $("resumeBtn").addEventListener("click",()=>{paused=false;$("pauseModal").classList.add("hidden");});
   $("reviewBtn").addEventListener("click",showReview);
+  $("remockBtn").addEventListener("click",startRemock);
   $("newTestBtn").addEventListener("click",()=>{
     clearInterval(timerId);
+    questions=[]; answers={}; marked=new Set(); pendingRemockQuestions=[]; remockRound=false;
     $("resultScreen").classList.add("hidden");
     $("setupScreen").classList.remove("hidden");
     $("setupMessage").innerHTML="";
